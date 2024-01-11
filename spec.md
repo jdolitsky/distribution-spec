@@ -153,7 +153,7 @@ To pull a manifest, perform a `GET` request to a URL in the following form:
 The `<reference>` MUST NOT be in any other format.
 Throughout this document, `<name>` MUST match the following regular expression:
 
-`[a-z0-9]+((\.|_|__|-+)[a-z0-9]+)*(/[a-z0-9]+((\.|_|__|-+)[a-z0-9]+)*)*`
+`[a-z0-9]+((\.|_|__|-+)[a-z0-9]+)*(\/[a-z0-9]+((\.|_|__|-+)[a-z0-9]+)*)*`
 
 Throughout this document, `<reference>` as a tag MUST be at most 128 characters in length and MUST match the following regular expression:
 
@@ -161,9 +161,11 @@ Throughout this document, `<reference>` as a tag MUST be at most 128 characters 
 
 The client SHOULD include an `Accept` header indicating which manifest content types it supports.
 In a successful response, the `Content-Type` header will indicate the type of the returned manifest.
+The registry SHOULD NOT include parameters on the `Content-Type` header.
+The client SHOULD ignore parameters on the `Content-Type` header.
 The `Content-Type` header SHOULD match what the client [pushed as the manifest's `Content-Type`](#pushing-manifests).
 If the manifest has a `mediaType` field, clients SHOULD reject unless the `mediaType` field's value matches the type specified by the `Content-Type` header.
-For more information on the use of `Accept` headers and content negotiation, please see [Content Negotiation](./content-negotiation.md).
+For more information on the use of `Accept` headers and content negotiation, please see [Content Negotiation](./content-negotiation.md) and [RFC7231](https://www.rfc-editor.org/rfc/rfc7231#section-3.1.1.1).
 
 A GET request to an existing manifest URL MUST provide the expected manifest, with a response code that MUST be `200 OK`.
 A successful response SHOULD contain the digest of the uploaded blob in the header `Docker-Content-Digest`.
@@ -320,7 +322,7 @@ The process remains unchanged for chunked upload, except that the post request M
 Content-Length: 0
 ```
 
-If the registry has a minimum chunk size, the response SHOULD include the following header, where `<size>` is the size in bytes (see the blob `PATCH` definition for usage):
+If the registry has a minimum chunk size, the `POST` response SHOULD include the following header, where `<size>` is the size in bytes (see the blob `PATCH` definition for usage):
 
 ```
 OCI-Chunk-Min-Length: <size>
@@ -352,7 +354,7 @@ It MUST match the following regular expression:
 ```
 
 The `<length>` is the content-length, in bytes, of the current chunk.
-If the registry provides a `OCI-Chunk-Min-Length` header in the `PUT` response, the size of each chunk, except for the final chunk, SHOULD be greater or equal to that value.
+If the registry provides an `OCI-Chunk-Min-Length` header in the `POST` response, the size of each chunk, except for the final chunk, SHOULD be greater or equal to that value.
 The final chunk MAY have any length.
 
 Each successful chunk upload MUST have a `202 Accepted` response code, and MUST have the following headers:
@@ -443,6 +445,8 @@ This indicates that the upload session has begun and that the client MAY proceed
 To push a manifest, perform a `PUT` request to a path in the following format, and with the following headers and body: `/v2/<name>/manifests/<reference>` <sup>[end-7](#endpoints)</sup>
 
 Clients SHOULD set the `Content-Type` header to the type of the manifest being pushed.
+The client SHOULD NOT include parameters on the `Content-Type` header (see [RFC7231](https://www.rfc-editor.org/rfc/rfc7231#section-3.1.1.1)).
+The registry SHOULD ignore parameters on the `Content-Type` header.
 All manifests SHOULD include a `mediaType` field declaring the type of the manifest being pushed.
 If a manifest includes a `mediaType` field, clients MUST set the `Content-Type` header to the value specified by the `mediaType` field.
 
@@ -557,13 +561,12 @@ If the request is invalid, such as a `<digest>` with an invalid syntax, a `400 B
 
 Upon success, the response MUST be a JSON body with an image index containing a list of descriptors.
 The `Content-Type` header MUST be set to `application/vnd.oci.image.index.v1+json`.
-Each descriptor is of an image manifest in the same `<name>` namespace with a `subject` field that specifies the value of `<digest>`.
-The descriptors MUST include an `artifactType` field that is set to the value of the `artifactType` in the image manifest, if present.
+Each descriptor is of an image manifest or index in the same `<name>` namespace with a `subject` field that specifies the value of `<digest>`.
+The descriptors MUST include an `artifactType` field that is set to the value of the `artifactType` in the image manifest or index, if present.
 If the `artifactType` is empty or missing in the image manifest, the value of `artifactType` MUST be set to the config descriptor `mediaType` value.
-The descriptors MUST include annotations from the image manifest.
+If the `artifactType` is empty or missing in an index, the `artifactType` MUST be omitted.
+The descriptors MUST include annotations from the image manifest or index.
 If a query results in no matching referrers, an empty manifest list MUST be returned.
-If a manifest with the digest `<digest>` does not exist, a registry MAY return an empty manifest list.
-After a manifest with the digest `<digest>` is pushed, the registry MUST include previously pushed entries in the referrers list.
 
 ```json
 {
@@ -576,7 +579,7 @@ After a manifest with the digest `<digest>` is pushed, the registry MUST include
       "digest": "sha256:a1a1a1...",
       "artifactType": "application/vnd.example.sbom.v1",
       "annotations": {
-        "org.opencontainers.artifact.created": "2022-01-01T14:42:55Z",
+        "org.opencontainers.image.created": "2022-01-01T14:42:55Z",
         "org.example.sbom.format": "json"
       }
     },
@@ -586,8 +589,16 @@ After a manifest with the digest `<digest>` is pushed, the registry MUST include
       "digest": "sha256:a2a2a2...",
       "artifactType": "application/vnd.example.signature.v1",
       "annotations": {
-        "org.opencontainers.artifact.created": "2022-01-01T07:21:33Z",
+        "org.opencontainers.image.created": "2022-01-01T07:21:33Z",
         "org.example.signature.fingerprint": "abcd"
+      }
+    },
+    {
+      "mediaType": "application/vnd.oci.image.index.v1+json",
+      "size": 1234,
+      "digest": "sha256:a3a3a3...",
+      "annotations": {
+        "org.opencontainers.image.created": "2023-01-01T07:21:33Z",
       }
     }
   ]
